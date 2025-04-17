@@ -7,6 +7,7 @@ import math
 import os
 import subprocess
 from tkinter import messagebox
+import sys
 
 # Try to import notify2, but provide fallbacks if not available
 try:
