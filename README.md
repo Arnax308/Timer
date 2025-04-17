@@ -10,8 +10,14 @@ Another functionality is notifications. It is often that while being engrossed i
 
 You have 2 source code files, one for windows(timer-win.py) and one for Linux(timer.py). Choose the according to your need. 
 
-Install pyinstaller via
+## For Windows
 
+You need to install the requirments, you can do that by using
+```
+pip install -r requirments.txt
+```
+
+Install pyinstaller via
 ```
 pip install pyinstaller
 ```
@@ -20,3 +26,34 @@ Now run
 ```
 pyinstaller --onefile --windowed --icon=timer_icon.ico timer-win.py
 ```
+
+If you got to the directory, in which you ran this command, you will see two new folders. The exe will be avaliable in dist. 
+You can place this exe anywhere in your computer now and it will work. 
+
+## For Linux
+
+You need to install the requirments, you can do that by using
+```
+pip install -r requirments.txt
+```
+
+### Make the shell script executable
+```
+chmod +x timer-lin.sh
+```
+
+Now you can run the program using
+```
+./timer-lin.sh run
+```
+
+### To build an executable
+```
+./timer-lin.sh build
+```
+
+### To install as an application
+```
+./timer-lin.sh install
+```
+Running the above command creates an desktop entry!
