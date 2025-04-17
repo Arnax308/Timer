@@ -1,10 +1,19 @@
+#!/usr/bin/env python3
 import tkinter as tk
 from tkinter import ttk
 import time
 import threading
-import notify2
 import math
+import os
+import subprocess
 from tkinter import messagebox
+
+# Try to import notify2, but provide fallbacks if not available
+try:
+    import notify2
+    HAS_NOTIFY2 = True
+except ImportError:
+    HAS_NOTIFY2 = False
 
 # Helper function to create a label with a shadow effect.
 def create_shadow_label(parent, text, font, fg, bg, offset=(2,2), shadow_color="black"):
@@ -45,7 +54,7 @@ class ModernEntry(tk.Frame):
         super().__init__(parent, bg='#1e1e1e')
         # Increased padding by about 10%
         self.container = tk.Frame(self, bg='#1e1e1e', padx=6, pady=6)
-        self.container.pack(fill=tk.X, expand=True)# Draw the default timer as "00:00"
+        self.container.pack(fill=tk.X, expand=True)
         shadow_label = create_shadow_label(self.container, label_text,
                                            font=('Helvetica', 12),
                                            fg='white',
@@ -90,7 +99,23 @@ class ProductivityTimer:
         self.root.geometry("1100x1000")
         self.root.configure(bg='#121212')
         
-        notify2.init('Productivity Timer')
+        # Initialize notification system
+        self.has_notifications = False
+        if HAS_NOTIFY2:
+            try:
+                notify2.init('Productivity Timer')
+                self.has_notifications = True
+            except Exception:
+                pass
+        
+        # Set up icon if it exists
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(script_dir, "timer_icon.png")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+            except Exception:
+                pass
         
         self.running = False
         self.work_time = tk.StringVar(value="60")
@@ -184,13 +209,26 @@ class ProductivityTimer:
                                       relief=tk.FLAT, padx=22, pady=8, bd=0, highlightthickness=0)
         self.reset_button.pack(side=tk.LEFT, padx=6, pady=10)
 
-        self.status_label = create_shadow_label(main_frame, "",
+        self.status_label = create_shadow_label(main_frame, "Ready",
                                                 font=('Helvetica', 12),
                                                 fg='white',
                                                 bg='#121212',
                                                 offset=(1,1),
                                                 shadow_color='black')
         self.status_label.pack(pady=6)
+        
+        # Show notification status
+        if not self.has_notifications:
+            notification_status = create_shadow_label(
+                main_frame, 
+                "Note: notify2 module not found. Desktop notifications disabled.",
+                font=('Helvetica', 10),
+                fg='yellow',
+                bg='#121212',
+                offset=(1,1),
+                shadow_color='black'
+            )
+            notification_status.pack(pady=6)
     
     def _clear_notifications(self):
         self.notifications = []
@@ -241,7 +279,8 @@ class ProductivityTimer:
     def stop_timer(self):
         self.running = False
         self.start_button.config(state='normal')
-        self.status_label.destroy()
+        if hasattr(self, 'status_label') and self.status_label:
+            self.status_label.destroy()
         self.status_label = create_shadow_label(self.root, "Stopped",
                                                 font=('Helvetica', 12),
                                                 fg='white',
@@ -251,59 +290,139 @@ class ProductivityTimer:
         self.status_label.pack(pady=6)
         
     def _timer_loop(self):
-        while self.running:
-            try:
-                minutes = int(self.work_time.get()) if self.is_work_period else int(self.break_time.get())
-                seconds = minutes * 60
-                total_seconds = seconds
-                tolerance = (100 / total_seconds) / 2.0
-                for remaining in range(seconds, -1, -1):
-                    if not self.running:
-                        return
-                    mins, secs = divmod(remaining, 60)
-                    time_text = f"{mins:02d}:{secs:02d}"
-                    progress = ((total_seconds - remaining) / total_seconds) * 100
-                    self.root.after(0, lambda p=progress, t=time_text: self.progress_bar.draw(p, t))
+        try:
+            period_status = create_shadow_label(
+                self.root, 
+                "Work Period" if self.is_work_period else "Break Period",
+                font=('Helvetica', 12, 'bold'),
+                fg='#3498db' if self.is_work_period else '#2ecc71',
+                bg='#121212',
+                offset=(1,1),
+                shadow_color='black'
+            )
+            period_status.pack(pady=6)
+            
+            while self.running:
+                try:
+                    minutes = int(self.work_time.get()) if self.is_work_period else int(self.break_time.get())
+                    seconds = minutes * 60
+                    total_seconds = seconds
+                    tolerance = (100 / total_seconds) / 2.0
+                    for remaining in range(seconds, -1, -1):
+                        if not self.running:
+                            if period_status:
+                                period_status.destroy()
+                            return
+                        mins, secs = divmod(remaining, 60)
+                        time_text = f"{mins:02d}:{secs:02d}"
+                        progress = ((total_seconds - remaining) / total_seconds) * 100
+                        self.root.after(0, lambda p=progress, t=time_text: self.progress_bar.draw(p, t))
+                        if self.is_work_period:
+                            current_percentage = ((total_seconds - remaining) / total_seconds) * 100
+                            for notif in self.notifications:
+                                if (not notif.triggered and 
+                                    abs(current_percentage - notif.percentage) <= tolerance):
+                                    self._send_notification(notif.message)
+                                    self._flash_screen()
+                                    notif.triggered = True
+                        time.sleep(1)
+                    period_type = "Work" if self.is_work_period else "Break"
+                    self._send_notification(f"{period_type} period completed!")
+                    self._flash_screen()
                     if self.is_work_period:
-                        current_percentage = ((total_seconds - remaining) / total_seconds) * 100
-                        for notif in self.notifications:
-                            if (not notif.triggered and 
-                                abs(current_percentage - notif.percentage) <= tolerance):
-                                self._send_notification(notif.message)
-                                self._flash_screen()
-                                notif.triggered = True
-                    time.sleep(1)
-                period_type = "Work" if self.is_work_period else "Break"
-                self._send_notification(f"{period_type} period completed!")
-                self._flash_screen()
-                if self.is_work_period:
-                    self._clear_notifications()
-                self.is_work_period = not self.is_work_period
-            except ValueError:
-                self._send_notification("Please enter valid numbers for timer settings!")
-                self.stop_timer()
-                break
+                        self._clear_notifications()
+                    self.is_work_period = not self.is_work_period
+                    if period_status:
+                        period_status.destroy()
+                    period_status = create_shadow_label(
+                        self.root, 
+                        "Work Period" if self.is_work_period else "Break Period",
+                        font=('Helvetica', 12, 'bold'),
+                        fg='#3498db' if self.is_work_period else '#2ecc71',
+                        bg='#121212',
+                        offset=(1,1),
+                        shadow_color='black'
+                    )
+                    period_status.pack(pady=6)
+                except ValueError:
+                    self._send_notification("Please enter valid numbers for timer settings!")
+                    self.stop_timer()
+                    if period_status:
+                        period_status.destroy()
+                    break
+        except Exception as e:
+            self.stop_timer()
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            if period_status:
+                period_status.destroy()
     
     def _send_notification(self, message):
-        notification = notify2.Notification(
-            "Productivity Timer",
-            message,
-            "dialog-information"
-        )
-        notification.show()
+        # Show notification in a dialog if notify2 is not available
+        if not self.has_notifications:
+            self.root.after(0, lambda: messagebox.showinfo("Productivity Timer", message))
+            return
+            
+        try:
+            notification = notify2.Notification(
+                "Productivity Timer",
+                message,
+                "dialog-information"
+            )
+            notification.show()
+        except Exception:
+            # Fallback to message box if notification fails
+            self.root.after(0, lambda: messagebox.showinfo("Productivity Timer", message))
     
     def _flash_screen(self):
         try:
-            import subprocess
-            subprocess.run(["xrandr", "--output", "$(xrandr --current | grep primary | cut -f1 -d\" \")", "--brightness", "0.1"])
-            time.sleep(0.2)
-            subprocess.run(["xrandr", "--output", "$(xrandr --current | grep primary | cut -f1 -d\" \")", "--brightness", "1"])
+            # Fixed xrandr command for screen flashing
+            # Get the primary display
+            process = subprocess.Popen(
+                ["xrandr", "--current"], 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True
+            )
+            output, _ = process.communicate()
+            
+            # Find primary display
+            primary_display = None
+            for line in output.split('\n'):
+                if " connected " in line and "primary" in line:
+                    primary_display = line.split()[0]
+                    break
+            
+            if primary_display:
+                # Flash the screen
+                subprocess.run(["xrandr", "--output", primary_display, "--brightness", "0.1"])
+                time.sleep(0.2)
+                subprocess.run(["xrandr", "--output", primary_display, "--brightness", "1"])
         except Exception:
+            # Silently fail if screen flashing doesn't work
             pass
     
     def run(self):
         self.root.mainloop()
 
+# Create executable detection for proper script location
+def get_script_path():
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return base_path
+
 if __name__ == "__main__":
+    # Set working directory to script location
+    os.chdir(get_script_path())
+    
+    # Check for dependencies
+    if not HAS_NOTIFY2:
+        print("Warning: notify2 module not found. Desktop notifications will be disabled.")
+        print("To enable notifications, install notify2 with: pip install notify2")
+    
+    # Run application
     app = ProductivityTimer()
     app.run()
