@@ -58,4 +58,4 @@ Now you can run the program using
 ```
 Running the above command creates an desktop entry!
 
-I have also given, an ico file, which can be used as the applications icon if you want
+I have also given, an ico file(timer-icon.ico), which can be used as the applications icon if you want
