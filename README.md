@@ -4,3 +4,19 @@ It's a not just a simple timer, albeit it can be used as one if needed. It was m
 
 
 Another functionality is notifications. It is often that while being engrossed in study or work, I forget to do smaller things like texting someone back or drinking water, etc. You can enter a percentage number and say you entered 60 min as your work time, and your notification time as 50%, so after 30 mins it will pop up with a notification message that you entered. 
+
+
+# How to convert to .exe
+
+You have 2 source code files, one for windows(timer-win.py) and one for Linux(timer.py). 
+
+Install pyinstaller via
+
+```
+pip install pyinstaller
+```
+
+Now run 
+```
+pyinstaller --onefile --windowed --icon=timer_icon.ico timer-win.py
+```
