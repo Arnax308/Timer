@@ -8,7 +8,7 @@ Another functionality is notifications. It is often that while being engrossed i
 
 # How to convert to .exe
 
-You have 2 source code files, one for windows(timer-win.py) and one for Linux(timer.py). 
+You have 2 source code files, one for windows(timer-win.py) and one for Linux(timer.py). Choose the according to your need. 
 
 Install pyinstaller via
 
